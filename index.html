@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Infinite Minecraft Miner</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            border: 2px solid #444;
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            display: flex;
+            justify-content: space-between;
+            width: 320px;
+        }
+
+        #inventory,
+        #commands {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .item img {
+            width: 16px;
+            height: 16px;
+        }
+
+        .btn {
+            padding: 4px 8px;
+            background: red;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn.green {
+            background: limegreen;
+        }
+
+        #progress-container {
+            width: 320px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            margin: 5px;
+        }
+
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background: limegreen;
+            border-radius: 10px;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="ui">
+        <div id="inventory"></div>
+        <div>
+            <div class="btn green" onclick="command('GOLDEN')">GOLDEN</div>
+            <div class="btn" onclick="command('TNT')">TNT</div>
+            <div class="btn" onclick="command('FAST')">FAST</div>
+            <div class="btn" onclick="command('SLOW')">SLOW</div>
+        </div>
+    </div>
+
+    <div id="progress-container">
+        <div id="progress-fill"></div>
+    </div>
+
+    <canvas id="gameCanvas" width="320" height="480"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const blockSize = 32;
+        const rows = 100;
+        const cols = 100000;
+
+        const blocks = [];
+        const inventory = {
+            stone: 0,
+            iron: 0,
+            gold: 0,
+            redstone: 0,
+            diamond: 0,
+            emerald: 0
+        };
+
+        const images = {};
+        const blockTypes = ['stone', 'iron_ore', 'gold_ore', 'redstone_ore', 'diamond_ore', 'emerald_ore'];
+
+        function loadImages(callback) {
+            let loaded = 0;
+            blockTypes.concat('miner').forEach(type => {
+                const img = new Image();
+                img.src = `sprites/${type}.png`;
+                img.onload = () => {
+                    images[type] = img;
+                    loaded++;
+                    if (loaded === blockTypes.length + 1) callback();
+                };
+            });
+        }
+
+        function generateWorld() {
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const type = blockTypes[Math.floor(Math.random() * blockTypes.length)];
+                    blocks.push({ x, y, type, dug: false });
+                }
+            }
+        }
+
+        let offsetY = 0;
+        let minerPos = 5;
+
+        // function draw() {
+        //   ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        //   for (let block of blocks) {
+        //     if (block.dug) continue;
+        //     const x = block.x * blockSize;
+        //     const y = block.y * blockSize - offsetY;
+        //     if (y >= -blockSize && y <= canvas.height) {
+        //       ctx.drawImage(images[block.type], x, y, blockSize, blockSize);
+        //     }
+        //   }
+
+        //   // draw miner
+        //   const minerY = Math.floor(minerPos / cols);
+        //   const minerX = minerPos % cols;
+        //   ctx.drawImage(images['miner'], minerX * blockSize, minerY * blockSize - offsetY, blockSize, blockSize);
+        // }
+        let pickaxeAngle = 0;
+        let pickaxeOffset = 0;
+        let pickaxeDir = 1;
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let block of blocks) {
+                if (block.dug) continue;
+                const x = block.x * blockSize;
+                const y = block.y * blockSize - offsetY;
+                if (y >= -blockSize && y <= canvas.height) {
+                    ctx.drawImage(images[block.type], x, y, blockSize, blockSize);
+                }
+            }
+
+            // draw miner
+            const minerY = Math.floor(minerPos / cols);
+            const minerX = minerPos % cols;
+
+            ctx.drawImage(images['miner'], minerX * blockSize, minerY * blockSize - offsetY, blockSize, blockSize);
+
+            // draw pickaxe animation
+            ctx.save();
+
+            const px = minerX * blockSize + blockSize / 2;
+            const py = minerY * blockSize - offsetY + blockSize / 2;
+
+            // Pickaxe anim logic
+            pickaxeAngle += 0.1 * pickaxeDir;
+            if (Math.abs(pickaxeAngle) > 0.5) pickaxeDir *= -1;
+
+            pickaxeOffset = 5 * Math.sin(pickaxeAngle * 4);
+
+            ctx.translate(px, py);
+            ctx.rotate(pickaxeAngle);
+            ctx.translate(pickaxeOffset, -10);
+            ctx.drawImage(images['pickaxe'], -8, -8, 16, 16);
+
+            ctx.restore();
+        }
+
+        function update() {
+            if (minerPos >= blocks.length) return;
+            const block = blocks[minerPos];
+            block.dug = true;
+            inventory[block.type] = (inventory[block.type] || 0) + 1;
+            minerPos += cols;
+            offsetY += 2;
+            updateUI();
+        }
+
+        function updateUI() {
+            const inventoryDiv = document.getElementById('inventory');
+            inventoryDiv.innerHTML = '';
+            for (let k in inventory) {
+                inventoryDiv.innerHTML += `<div class="item"><img src="sprites/${k}.png"/> ${inventory[k]}</div>`;
+            }
+            document.getElementById('progress-fill').style.width = ((minerPos / blocks.length) * 100).toFixed(1) + '%';
+        }
+
+        function command(cmd) {
+            alert('Command: ' + cmd);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        loadImages(() => {
+            blockTypes.concat('miner', 'pickaxe').forEach(type => {
+
+            generateWorld();
+            updateUI();
+            gameLoop();
+            });
+        });
+    </script>
+</body>
+
+</html>

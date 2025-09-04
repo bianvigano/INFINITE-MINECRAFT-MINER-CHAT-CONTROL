@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Falling Pickaxe Game</title>
+  <style>
+    canvas { background: #111; display: block; margin: 0 auto; border: 2px solid #444; }
+    #chat { text-align: center; margin: 10px; }
+    input { padding: 8px; width: 200px; }
+  </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="400" height="600"></canvas>
+<div id="chat">
+    <p>Type 'left' & 'l' or 'right' & 'r'</p>
+  <input id="chatInput" placeholder="Type 'left' & 'l' or 'right' & 'r'" />
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// === Block Config ===
+const BLOCK_WIDTH = 57;
+const BLOCK_HEIGHT = 59;
+const BLOCK_PADDING = 0;
+const BLOCK_COLS = Math.floor(canvas.width / (BLOCK_WIDTH + BLOCK_PADDING));
+
+let cameraY = 0;
+let score = 0;
+
+// Bounce settings
+let normalBounceForce = -8;
+let normalHorizontalForce = 1;
+let tntBounceForce = -12;
+let tntHorizontalForce = 5;
+
+// Spin chance
+let normalSpinChance = 0.9;
+let tntSpinChance = 0.8;
+
+let pickaxe = {
+  x: canvas.width / 2 - 15,
+  y: 0,
+  width: 30,
+  height: 30,
+  velocityY: 0,
+  velocityX: 0,
+  gravity: 0.5,
+  gravityModifier: 1,
+  modifierTimer: 0,
+  modifierType: null,
+  angle: 0,
+  rotateSpeed: 0,
+  targetX: canvas.width / 2 - 15 // New for smooth movement
+};
+
+let blocks = [];
+console.log(blocks)
+function getRandomBlockType() {
+  const rand = Math.random();
+  if (rand < 0.1) return 'tnt';
+  if (rand < 0.2) return 'powerup';
+  if (rand < 0.3) return 'powerdown';
+  return 'normal';
+}
+
+function generateBlocksBelow() {
+  const startY = Math.floor((pickaxe.y + 600) / (BLOCK_HEIGHT + BLOCK_PADDING)) * (BLOCK_HEIGHT + BLOCK_PADDING);
+  for (let y = startY; y < startY + 300; y += (BLOCK_HEIGHT + BLOCK_PADDING)) {
+    for (let c = 0; c < BLOCK_COLS; c++) {
+      const blockX = c * (BLOCK_WIDTH + BLOCK_PADDING);
+      if (!blocks.find(b => b.y === y && b.x === blockX)) {
+        blocks.push({
+          x: blockX,
+          y: y,
+          width: BLOCK_WIDTH,
+          height: BLOCK_HEIGHT,
+          hit: false,
+          type: getRandomBlockType()
+        });
+      }
+    }
+  }
+}
+
+function drawHUD() {
+  ctx.fillStyle = "#fff";
+  ctx.font = "16px Arial";
+  ctx.fillText("Score: " + score, 10, 20);
+
+  if (pickaxe.modifierTimer > 0) {
+    const label = pickaxe.modifierType === "powerup" ? "FAST" : "SLOW";
+    ctx.fillStyle = pickaxe.modifierType === "powerup" ? "#44ff44" : "#4488ff";
+    ctx.fillText("Status: " + label + " (" + Math.ceil(pickaxe.modifierTimer / 60) + "s)", 10, 40);
+  }
+}
+
+function drawBlocks() {
+  blocks.forEach(block => {
+    if (!block.hit) {
+      let color = "#ffaa00";
+      if (block.type === 'tnt') color = "#ff4444";
+      if (block.type === 'powerup') color = "#44ff44";
+      if (block.type === 'powerdown') color = "#4488ff";
+      ctx.fillStyle = color;
+      ctx.fillRect(block.x, block.y - cameraY, block.width, block.height);
+    }
+  });
+}
+
+function drawPickaxe() {
+  ctx.save();
+  ctx.translate(pickaxe.x + pickaxe.width / 2, pickaxe.y - cameraY + pickaxe.height / 2);
+  ctx.rotate(pickaxe.angle);
+  ctx.fillStyle = "#00ffcc";
+  ctx.fillRect(-pickaxe.width / 2, -pickaxe.height / 2, pickaxe.width, pickaxe.height);
+  ctx.restore();
+}
+
+function explodeAround(tntBlock) {
+  blocks.forEach(block => {
+    const isAdjacent =
+      (Math.abs(block.x - tntBlock.x) === (BLOCK_WIDTH + BLOCK_PADDING) && block.y === tntBlock.y) ||
+      (Math.abs(block.y - tntBlock.y) === (BLOCK_HEIGHT + BLOCK_PADDING) && block.x === tntBlock.x);
+    if (isAdjacent && !block.hit) {
+      block.hit = true;
+      score++;
+    }
+  });
+}
+
+function checkCollision() {
+  blocks.forEach(block => {
+    if (!block.hit &&
+      pickaxe.x < block.x + block.width &&
+      pickaxe.x + pickaxe.width > block.x &&
+      pickaxe.y < block.y + block.height &&
+      pickaxe.y + pickaxe.height > block.y
+    ) {
+      block.hit = true;
+      score++;
+
+      if (block.type === 'normal') {
+        pickaxe.velocityY = normalBounceForce;
+        if (Math.random() < normalSpinChance) {
+          pickaxe.velocityX = (Math.random() < 0.5 ? -1 : 1) * normalHorizontalForce;
+          pickaxe.rotateSpeed = 0.05 + Math.random() * 0.05;
+        }
+      }
+
+      if (block.type === 'tnt') {
+        explodeAround(block);
+        pickaxe.velocityY = tntBounceForce;
+        if (Math.random() < tntSpinChance) {
+          pickaxe.velocityX = (Math.random() < 0.5 ? -1 : 1) * tntHorizontalForce;
+          pickaxe.rotateSpeed = 0.2 + Math.random() * 0.2;
+        }
+      }
+
+      if (block.type === 'powerup') {
+        pickaxe.gravityModifier = 2;
+        pickaxe.modifierTimer = 300;
+        pickaxe.modifierType = "powerup";
+      }
+
+      if (block.type === 'powerdown') {
+        pickaxe.gravityModifier = 0.3;
+        pickaxe.modifierTimer = 300;
+        pickaxe.modifierType = "powerdown";
+      }
+    }
+  });
+}
+
+function update() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (pickaxe.modifierTimer > 0) {
+    pickaxe.modifierTimer--;
+    if (pickaxe.modifierTimer === 0) {
+      pickaxe.gravityModifier = 1;
+      pickaxe.modifierType = null;
+    }
+  }
+
+  pickaxe.velocityY += pickaxe.gravity * pickaxe.gravityModifier;
+  pickaxe.y += pickaxe.velocityY;
+
+  pickaxe.x += (pickaxe.targetX - pickaxe.x) * 0.2;
+  pickaxe.x += pickaxe.velocityX;
+  pickaxe.velocityX *= 0.95;
+
+  if (pickaxe.rotateSpeed > 0) {
+    pickaxe.angle += pickaxe.rotateSpeed;
+    pickaxe.rotateSpeed *= 0.98;
+    if (pickaxe.rotateSpeed < 0.01) pickaxe.rotateSpeed = 0;
+  }
+
+  if (pickaxe.y + pickaxe.height > canvas.height + cameraY) {
+    pickaxe.y = canvas.height + cameraY - pickaxe.height;
+    pickaxe.velocityY = normalBounceForce;
+  }
+
+  if (pickaxe.x < 0) pickaxe.x = 0;
+  if (pickaxe.x + pickaxe.width > canvas.width) pickaxe.x = canvas.width - pickaxe.width;
+
+  cameraY = pickaxe.y - 200;
+
+  generateBlocksBelow();
+  checkCollision();
+  drawBlocks();
+  drawPickaxe();
+  drawHUD();
+
+  requestAnimationFrame(update);
+}
+
+document.getElementById("chatInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const cmd = e.target.value.trim().toLowerCase();
+    if (cmd === "left" || cmd === "l") {
+      pickaxe.targetX = Math.max(0, pickaxe.x - 30);
+    } else if (cmd === "right" || cmd === "r") {
+      pickaxe.targetX = Math.min(canvas.width - pickaxe.width, pickaxe.x + 30);
+    }
+    e.target.value = "";
+  }
+});
+
+update();
+</script>
+
+</body>
+</html>

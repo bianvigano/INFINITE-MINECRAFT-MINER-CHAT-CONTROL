@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Falling Pickaxe Game</title>
+    <style>
+        canvas {
+            background: #111;
+            display: block;
+            margin: 0 auto;
+            border: 2px solid #444;
+        }
+
+        #chat {
+            text-align: center;
+            margin: 10px;
+        }
+
+        input {
+            padding: 8px;
+            width: 200px;
+        }
+
+        #ui {
+            width: 400px;
+            margin: 0 auto;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        #uiinventory {
+            position: absolute;
+            top: 10px;
+            display: flex;
+            justify-content: space-between;
+            width: 320px;
+        }
+
+        #inventory {
+            text-align: left;
+            padding: 10px;
+            background: #222;
+            border-radius: 8px;
+            color: white;
+            font-family: monospace;
+            font-size: 14px;
+            /* max-width: 250px; */
+            margin: 55px -82px auto;
+        }
+
+        #scoreStatus {
+            display: flex;
+            justify-content: space-between;
+            background: #333;
+            padding: 6px;
+            margin-bottom: 5px;
+        }
+
+        #progress-container {
+            height: 10px;
+            background: #444;
+            width: 100%;
+            border: 1px solid #666;
+        }
+
+        #progress-fill {
+            height: 100%;
+            background: #00ccff;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="ui">
+        <div id="uiinventory">
+            <div id="inventory">
+                <div id="stone">
+                    <img src="sprites/blockTypes/stone.png" width="20" height="20" />
+                    <span>stone: 0</span>
+                </div>
+                <div id="iron_ore">
+                    <img src="sprites/iron.png" width="20" height="20" />
+                    <span>iron ore: 0</span>
+                </div>
+                <div id="gold_ore">
+                    <img src="sprites/gold.png" width="20" height="20" />
+                    <span>gold ore: 0</span>
+                </div>
+                <div id="redstone_ore">
+                    <img src="sprites/redstone.png" width="20" height="20" />
+                    <span>redstone ore: 0</span>
+                </div>
+                <div id="diamond_ore">
+                    <img src="sprites/diamond.png" width="20" height="20" />
+                    <span>diamond ore: 0</span>
+                </div>
+                <div id="emerald_ore">
+                    <img src="sprites/emerald.png" width="20" height="20" />
+                    <span>emerald ore: 0</span>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="scoreStatus">
+            <div id="score">Score: 0</div>
+            <div id="status">Status: -</div>
+        </div>
+        <div id="progress-container">
+            <div id="progress-fill"></div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+    <div id="chat">
+        <p>Type 'left' & 'l' or 'right' & 'r'</p>
+        <input id="chatInput" placeholder="Type 'left' & 'l' or 'right' & 'r'" />
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const BLOCK_WIDTH = 57;
+        const BLOCK_HEIGHT = 59;
+        const BLOCK_PADDING = 0;
+        const BLOCK_COLS = Math.floor(canvas.width / (BLOCK_WIDTH + BLOCK_PADDING));
+        const blockTypes = ['stone', 'iron_ore', 'gold_ore', 'redstone_ore', 'diamond_ore', 'emerald_ore'];
+
+        let cameraY = 0;
+        // Posisi kamera secara vertikal.
+        // Ini dipakai untuk menggeser tampilan layar seiring pickaxe turun ke bawah.
+        // Nilainya akan mengikuti posisi pickaxe supaya player selalu terlihat di layar.
+
+        let score = 0;
+        // Skor pemain, bertambah setiap kali pickaxe menghancurkan blok.
+
+        const scoreTarget = 999999999999999;
+        // Target skor yang ingin dicapai pemain.
+        // Bisa dipakai untuk menandai "game selesai" atau unlock sesuatu jika score >= scoreTarget.
+
+        // === Bounce & Spin Settings ===
+
+        let normalBounceForce = -5;
+        // Kekuatan pantulan ke atas saat pickaxe mengenai blok biasa (normal).
+        // Nilai negatif karena dalam koordinat canvas, ke atas adalah arah negatif.
+        // Semakin besar (dalam negatif), semakin tinggi pantulannya.
+
+        let normalHorizontalForce = 0;
+        // Gaya dorong horizontal ke kiri/kanan saat pickaxe mantul dari blok biasa.
+        // Nilai kecil bikin gerakan lebih halus/natural, nilai besar bikin pickaxe cepat ke samping.
+
+        let tntBounceForce = -12;
+        // Pantulan ke atas saat pickaxe mengenai blok TNT.
+        // Lebih kuat dari normalBounceForce karena efek ledakan.
+
+        let tntHorizontalForce = 5;
+        // Gaya horizontal yang lebih besar saat pickaxe terkena TNT (karena meledak).
+        // Bikin pickaxe terpental ke samping dengan lebih cepat.
+
+        let normalSpinChance = 0.6;
+        // Peluang (0 - 1) pickaxe akan berputar saat menyentuh blok biasa.
+        // 0 = tidak pernah spin, 1 = selalu spin.
+
+        let tntSpinChance = 0.6;
+        // Peluang spin saat pickaxe terkena TNT.
+        // Biasanya spin lebih besar karena efek ledakan, bisa disesuaikan.
+
+
+        let inventoryCounts = {};
+        blockTypes.forEach(type => inventoryCounts[type] = 0);
+
+        const images = {};
+        function preloadImages() {
+            const allImages = {
+                pickaxe: 'sprites/TypesPickaxe/pickaxe.png',
+                stone: 'sprites/blockTypes/stone.png',
+                iron_ore: 'sprites/blockTypes/iron_ore.png',
+                gold_ore: 'sprites/blockTypes/gold_ore.png',
+                redstone_ore: 'sprites/blockTypes/redstone_ore.png',
+                diamond_ore: 'sprites/blockTypes/diamond_ore.png',
+                emerald_ore: 'sprites/blockTypes/emerald_ore.png',
+                tnt: 'sprites/TypesBlockEfek/tnt.png',
+                powerup: 'sprites/TypesBlockEfek/powerup.png',
+                powerdown: 'sprites/TypesBlockEfek/powerdown.png'
+            };
+            for (const [key, src] of Object.entries(allImages)) {
+                const img = new Image();
+                img.src = src;
+                images[key] = img;
+            }
+        }
+        preloadImages();
+
+        let pickaxe = {
+            x: canvas.width / 2 - 40 + Math.random() * 80, // jatuh gak selalu di tengah,
+            y: 0,
+            width: 55,
+            height: 55,
+            velocityY: 3 + Math.random() * 2, // jatuh dari awal
+            velocityX: (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 1.5), // gerakan kiri/kanan random
+            gravity: 0.1,
+            gravityModifier: 0.1,
+            modifierTimer: 0,
+            modifierType: null,
+            angle: 0,
+            rotateSpeed: (Math.random() < 0.5 ? -1 : 1) * (0.02 + Math.random() * 0.03), // langsung muter dikit dari awal
+        };
+
+        let blocks = [];
+
+        function getRandomBlockType() {
+            const rand = Math.random();
+            if (rand < 0.07) return 'tnt';
+            if (rand < 0.1) return 'powerup';
+            if (rand < 0.15) return 'powerdown';
+            return blockTypes[Math.floor(Math.random() * blockTypes.length)];
+        }
+
+        function generateBlocksBelow() {
+            const startY = Math.floor((pickaxe.y + 600) / (BLOCK_HEIGHT + BLOCK_PADDING)) * (BLOCK_HEIGHT + BLOCK_PADDING);
+            for (let y = startY; y < startY + 300; y += (BLOCK_HEIGHT + BLOCK_PADDING)) {
+                for (let c = 0; c < BLOCK_COLS; c++) {
+                    const blockX = c * (BLOCK_WIDTH + BLOCK_PADDING);
+                    if (!blocks.find(b => b.y === y && b.x === blockX)) {
+                        const type = getRandomBlockType();
+                        blocks.push({
+                            x: blockX,
+                            y: y,
+                            width: BLOCK_WIDTH,
+                            height: BLOCK_HEIGHT,
+                            hit: false,
+                            type: type,
+                            subtype: type
+                        });
+                    }
+                }
+            }
+        }
+
+        function drawHUD() {
+            document.getElementById("score").innerText = "Score: " + score;
+            if (pickaxe.modifierTimer > 0) {
+                const label = pickaxe.modifierType === "powerup" ? "FAST" : "SLOW";
+                document.getElementById("status").innerText = `Status: ${label} (${Math.ceil(pickaxe.modifierTimer / 60)}s)`;
+            } else {
+                document.getElementById("status").innerText = `Status: -`;
+            }
+            const percent = Math.min(100, (score / scoreTarget) * 100);
+            document.getElementById("progress-fill").style.width = percent + "%";
+        }
+
+        function updateInventoryUI() {
+            for (const key of blockTypes) {
+                const span = document.querySelector(`#${key} span`);
+                if (span) {
+                    span.textContent = `${inventoryCounts[key]}`;
+                }
+            }
+        }
+
+        function drawBlocks() {
+            blocks.forEach(block => {
+                if (!block.hit) {
+                    const img = images[block.subtype];
+                    if (img) {
+                        ctx.drawImage(img, block.x, block.y - cameraY, block.width, block.height);
+                    }
+                }
+            });
+        }
+
+        function drawPickaxe() {
+            ctx.save();
+            ctx.translate(pickaxe.x + pickaxe.width / 2, pickaxe.y - cameraY + pickaxe.height / 2);
+            ctx.rotate(pickaxe.angle);
+            ctx.drawImage(images.pickaxe, -pickaxe.width / 2, -pickaxe.height / 2, pickaxe.width, pickaxe.height);
+            ctx.restore();
+        }
+
+        function explodeAround(tntBlock) {
+            blocks.forEach(block => {
+                const isAdjacent =
+                    (Math.abs(block.x - tntBlock.x) === (BLOCK_WIDTH + BLOCK_PADDING) && block.y === tntBlock.y) ||
+                    (Math.abs(block.y - tntBlock.y) === (BLOCK_HEIGHT + BLOCK_PADDING) && block.x === tntBlock.x);
+                if (isAdjacent && !block.hit) {
+                    block.hit = true;
+                    score++;
+                    if (blockTypes.includes(block.subtype)) {
+                        inventoryCounts[block.subtype]++;
+                        updateInventoryUI();
+                    }
+                }
+            });
+        }
+
+        function checkCollision() {
+            blocks.forEach(block => {
+                if (!block.hit &&
+                    pickaxe.x < block.x + block.width &&
+                    pickaxe.x + pickaxe.width > block.x &&
+                    pickaxe.y < block.y + block.height &&
+                    pickaxe.y + pickaxe.height > block.y) {
+                    block.hit = true;
+                    score++;
+
+                    if (blockTypes.includes(block.subtype)) {
+                        inventoryCounts[block.subtype]++;
+                        updateInventoryUI();
+                    }
+
+                    if (block.type === 'normal' || blockTypes.includes(block.type)) {
+                        pickaxe.velocityY = normalBounceForce;
+                        console.log('manu',Math.random() < normalSpinChance)
+                        if (Math.random() < normalSpinChance) {
+                            const dir = Math.random() < 1 ? -1 : 1;
+                            console.log(dir)
+                            pickaxe.velocityX += dir * (normalHorizontalForce + Math.random());
+                            // pickaxe.rotateSpeed += dir * (0.03 + Math.random() * 0.07);
+                            pickaxe.rotateSpeed += dir * 0.05; // ⬅️ disini spin ditambahkan
+                        }
+                        const dir = Math.random() < 1 ? -1 : 1;
+                        pickaxe.velocityX += dir * (normalHorizontalForce + Math.random());
+                            // pickaxe.rotateSpeed += dir * (0.03 + Math.random() * 0.07);
+                            pickaxe.rotateSpeed += dir * 0.05; // ⬅️ disini spin ditambahkan
+                            console.log('manu',dir)
+                    }
+
+                    if (block.type === 'tnt') {
+                        explodeAround(block);
+                        pickaxe.velocityY = tntBounceForce;
+                        const dir = Math.random() < 0.5 ? -1 : 1;
+                        pickaxe.velocityX += dir * (tntHorizontalForce + Math.random() * 2);
+                        // pickaxe.rotateSpeed += dir * (0.2 + Math.random() * 0.4);
+                        pickaxe.rotateSpeed += dir * 0.1; // ⬅️ efek ledakan: spin lebih besar
+                    }
+
+                    if (block.type === 'powerup') {
+                        pickaxe.gravityModifier = 2;
+                        pickaxe.modifierTimer = 300;
+                    }
+
+                    if (block.type === 'powerdown') {
+                        pickaxe.gravityModifier = 0.03;
+                        pickaxe.modifierTimer = 300;
+                    }
+                }
+            });
+        }
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // === Physics & Movement ===
+            pickaxe.velocityY += pickaxe.gravity * pickaxe.gravityModifier;
+            pickaxe.y += pickaxe.velocityY;
+            pickaxe.x += pickaxe.velocityX;
+
+            // Gesekan
+            pickaxe.velocityX *= 0.985;
+            if (Math.abs(pickaxe.velocityX) < 0.01) pickaxe.velocityX = 0;
+
+            // Rotasi
+            pickaxe.angle += pickaxe.rotateSpeed;
+            pickaxe.rotateSpeed *= 0.985;
+            if (Math.abs(pickaxe.rotateSpeed) < 0.001) pickaxe.rotateSpeed = 0;
+
+            // Bounce dari bawah layar
+            if (pickaxe.y + pickaxe.height > canvas.height + cameraY) {
+                pickaxe.y = canvas.height + cameraY - pickaxe.height;
+                pickaxe.velocityY = normalBounceForce;
+                if (Math.random() < 0.3) {
+                    const dir = Math.random() < 0.5 ? -1 : 1;
+                    pickaxe.velocityX += dir * 1;
+                    pickaxe.rotateSpeed += dir * 0.1;
+                }
+            }
+
+            pickaxe.x = Math.max(0, Math.min(canvas.width - pickaxe.width, pickaxe.x));
+            cameraY = pickaxe.y - 200;
+
+            if (pickaxe.modifierTimer > 0) {
+                pickaxe.modifierTimer--;
+                if (pickaxe.modifierTimer === 0) {
+                    pickaxe.gravityModifier = 1;
+                }
+            }
+
+            generateBlocksBelow();
+            checkCollision();
+            drawBlocks();
+            drawPickaxe();
+            drawHUD();
+
+            requestAnimationFrame(update);
+            // console.log(pickaxe.x, pickaxe.y, pickaxe.velocityX, pickaxe.velocityY, pickaxe.angle, pickaxe.gravity, pickaxe.rotateSpeed)
+        }
+
+        document.getElementById("chatInput").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                const cmd = e.target.value.trim().toLowerCase();
+                if (cmd === "left" || cmd === "l") {
+                    pickaxe.velocityX = Math.max(0, pickaxe.x - 30);
+                } else if (cmd === "right" || cmd === "r") {
+                    pickaxe.velocityX = Math.min(canvas.width - pickaxe.width, pickaxe.x + 30);
+                }
+                e.target.value = "";
+            }
+        });
+
+        updateInventoryUI();
+        update();
+    </script>
+
+
+</body>
+
+</html>

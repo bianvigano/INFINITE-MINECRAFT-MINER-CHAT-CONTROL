@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pickaxe Physics Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; color: #fff; font-family: sans-serif; }
+        #score, #status { position: absolute; top: 10px; left: 10px; z-index: 10; }
+        #status { top: 30px; }
+        #progress { position: absolute; top: 50px; left: 10px; width: 200px; height: 10px; background: #555; }
+        #progress-fill { height: 100%; width: 0%; background: lime; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div id="score">Score: 0</div>
+    <div id="status">Status: -</div>
+    <div id="progress"><div id="progress-fill"></div></div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const BLOCK_WIDTH = 57;
+        const BLOCK_HEIGHT = 59;
+        const BLOCK_PADDING = 0;
+        const BLOCK_COLS = Math.floor(canvas.width / (BLOCK_WIDTH + BLOCK_PADDING));
+        const blockTypes = ['stone', 'iron_ore', 'gold_ore', 'redstone_ore', 'diamond_ore', 'emerald_ore'];
+
+        let cameraY = 0;
+        let score = 0;
+        const scoreTarget = 999999999999999;
+
+        // Physics Settings
+        let normalBounceForce = -5;
+        let normalHorizontalForce = 0.9;
+        let tntBounceForce = -12;
+        let tntHorizontalForce = 5;
+        let normalSpinChance = 0.6;
+        let tntSpinChance = 0.6;
+
+        let inventoryCounts = {};
+        blockTypes.forEach(type => inventoryCounts[type] = 0);
+
+        const images = {};
+        function preloadImages() {
+            const allImages = {
+                pickaxe: 'sprites/TypesPickaxe/pickaxe.png',
+                stone: 'sprites/blockTypes/stone.png',
+                iron_ore: 'sprites/blockTypes/iron_ore.png',
+                gold_ore: 'sprites/blockTypes/gold_ore.png',
+                redstone_ore: 'sprites/blockTypes/redstone_ore.png',
+                diamond_ore: 'sprites/blockTypes/diamond_ore.png',
+                emerald_ore: 'sprites/blockTypes/emerald_ore.png',
+                tnt: 'sprites/TypesBlockEfek/tnt.png',
+                powerup: 'sprites/TypesBlockEfek/powerup.png',
+                powerdown: 'sprites/TypesBlockEfek/powerdown.png'
+            };
+            for (const [key, src] of Object.entries(allImages)) {
+                const img = new Image();
+                img.src = src;
+                images[key] = img;
+            }
+        }
+        preloadImages();
+
+        let pickaxe = {
+            x: canvas.width / 2 - 15,
+            y: 0,
+            width: 55,
+            height: 55,
+            velocityY: 0,
+            velocityX: 1,
+            gravity: 0.5,
+            gravityModifier: 1,
+            modifierTimer: 0,
+            modifierType: null,
+            angle: 0,
+            rotateSpeed: 0,
+        };
+
+        let blocks = [];
+
+        function getRandomBlockType() {
+            const rand = Math.random();
+            if (rand < 0.05) return 'tnt';
+            return blockTypes[Math.floor(Math.random() * blockTypes.length)];
+        }
+
+        function generateBlocksBelow() {
+            const startY = Math.floor((pickaxe.y + 600) / (BLOCK_HEIGHT + BLOCK_PADDING)) * (BLOCK_HEIGHT + BLOCK_PADDING);
+            for (let y = startY; y < startY + 300; y += (BLOCK_HEIGHT + BLOCK_PADDING)) {
+                for (let c = 0; c < BLOCK_COLS; c++) {
+                    const blockX = c * (BLOCK_WIDTH + BLOCK_PADDING);
+                    if (!blocks.find(b => b.y === y && b.x === blockX)) {
+                        const type = getRandomBlockType();
+                        blocks.push({
+                            x: blockX,
+                            y: y,
+                            width: BLOCK_WIDTH,
+                            height: BLOCK_HEIGHT,
+                            hit: false,
+                            type: type,
+                            subtype: type
+                        });
+                    }
+                }
+            }
+        }
+
+        function drawHUD() {
+            document.getElementById("score").innerText = "Score: " + score;
+            if (pickaxe.modifierTimer > 0) {
+                const label = pickaxe.modifierType === "powerup" ? "FAST" : "SLOW";
+                document.getElementById("status").innerText = `Status: ${label} (${Math.ceil(pickaxe.modifierTimer / 60)}s)`;
+            } else {
+                document.getElementById("status").innerText = `Status: -`;
+            }
+            const percent = Math.min(100, (score / scoreTarget) * 100);
+            document.getElementById("progress-fill").style.width = percent + "%";
+        }
+
+        function drawBlocks() {
+            blocks.forEach(block => {
+                if (!block.hit) {
+                    const img = images[block.subtype];
+                    if (img) {
+                        ctx.drawImage(img, block.x, block.y - cameraY, block.width, block.height);
+                    }
+                }
+            });
+        }
+
+        function drawPickaxe() {
+            ctx.save();
+            ctx.translate(pickaxe.x + pickaxe.width / 2, pickaxe.y - cameraY + pickaxe.height / 2);
+            ctx.rotate(pickaxe.angle);
+            ctx.drawImage(images.pickaxe, -pickaxe.width / 2, -pickaxe.height / 2, pickaxe.width, pickaxe.height);
+            ctx.restore();
+        }
+
+        function explodeAround(tntBlock) {
+            blocks.forEach(block => {
+                const isAdjacent =
+                    (Math.abs(block.x - tntBlock.x) === (BLOCK_WIDTH + BLOCK_PADDING) && block.y === tntBlock.y) ||
+                    (Math.abs(block.y - tntBlock.y) === (BLOCK_HEIGHT + BLOCK_PADDING) && block.x === tntBlock.x);
+                if (isAdjacent && !block.hit) {
+                    block.hit = true;
+                    score++;
+                }
+            });
+        }
+
+        function checkCollision() {
+            blocks.forEach(block => {
+                if (!block.hit &&
+                    pickaxe.x < block.x + block.width &&
+                    pickaxe.x + pickaxe.width > block.x &&
+                    pickaxe.y < block.y + block.height &&
+                    pickaxe.y + pickaxe.height > block.y) {
+
+                    block.hit = true;
+                    score++;
+
+                    if (blockTypes.includes(block.subtype)) {
+                        inventoryCounts[block.subtype]++;
+                    }
+
+                    if (block.type === 'normal' || blockTypes.includes(block.type)) {
+                        pickaxe.velocityY = normalBounceForce;
+                        if (Math.random() < normalSpinChance) {
+                            const dir = Math.random() < 0.5 ? -1 : 1;
+                            pickaxe.velocityX += dir * (normalHorizontalForce + Math.random());
+                            // pickaxe.rotateSpeed += dir * (0.03 + Math.random() * 0.07);
+                            pickaxe.rotateSpeed += dir * 0.05; // ⬅️ disini spin ditambahkan
+                        }
+                    }
+
+                    if (block.type === 'tnt') {
+                        explodeAround(block);
+                        pickaxe.velocityY = tntBounceForce;
+                        const dir = Math.random() < 0.5 ? -1 : 1;
+                        pickaxe.velocityX += dir * (tntHorizontalForce + Math.random() * 2);
+                        // pickaxe.rotateSpeed += dir * (0.2 + Math.random() * 0.4);
+                        pickaxe.rotateSpeed += dir * 0.1; // ⬅️ efek ledakan: spin lebih besar
+                    }
+
+                    if (block.type === 'powerup') {
+                        pickaxe.gravityModifier = 2;
+                        pickaxe.modifierTimer = 300;
+                    }
+
+                    if (block.type === 'powerdown') {
+                        pickaxe.gravityModifier = 0.3;
+                        pickaxe.modifierTimer = 300;
+                    }
+                }
+            });
+        }
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // === Physics & Movement ===
+            pickaxe.velocityY += pickaxe.gravity * pickaxe.gravityModifier;
+            pickaxe.y += pickaxe.velocityY;
+            pickaxe.x += pickaxe.velocityX;
+
+            // Gesekan
+            pickaxe.velocityX *= 0.985;
+            if (Math.abs(pickaxe.velocityX) < 0.01) pickaxe.velocityX = 0;
+
+            // Rotasi
+            pickaxe.angle += pickaxe.rotateSpeed;
+            pickaxe.rotateSpeed *= 0.985;
+            if (Math.abs(pickaxe.rotateSpeed) < 0.001) pickaxe.rotateSpeed = 0;
+
+            // Bounce dari bawah layar
+            if (pickaxe.y + pickaxe.height > canvas.height + cameraY) {
+                pickaxe.y = canvas.height + cameraY - pickaxe.height;
+                pickaxe.velocityY = normalBounceForce;
+                if (Math.random() < 0.3) {
+                    const dir = Math.random() < 0.5 ? -1 : 1;
+                    pickaxe.velocityX += dir * 1;
+                    pickaxe.rotateSpeed += dir * 0.1;
+                }
+            }
+
+            pickaxe.x = Math.max(0, Math.min(canvas.width - pickaxe.width, pickaxe.x));
+            cameraY = pickaxe.y - 200;
+
+            if (pickaxe.modifierTimer > 0) {
+                pickaxe.modifierTimer--;
+                if (pickaxe.modifierTimer === 0) {
+                    pickaxe.gravityModifier = 1;
+                }
+            }
+
+            generateBlocksBelow();
+            checkCollision();
+            drawBlocks();
+            drawPickaxe();
+            drawHUD();
+
+            requestAnimationFrame(update);
+        }
+
+        update();
+    </script>
+</body>
+</html>

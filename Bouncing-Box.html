@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Box Physics</title>
+  <style>
+    canvas {
+      border: 1px solid black;
+      display: block;
+      margin: 20px auto;
+    }
+
+    select {
+      display: block;
+      margin: 10px auto;
+    }
+  </style>
+</head>
+
+<body>
+
+  <select id="physicsSelect">
+    <option value="realistic">Realistic</option>
+    <option value="arcade">Arcade</option>
+    <option value="cartoon">Cartoon</option>
+    <option value="slowmo">Slow Motion</option>
+    <option value="chaos">Chaos</option>
+  </select>
+  <button onclick="resetBox()">Reset</button>
+  <canvas id="canvas" width="500" height="1000"></canvas>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const physicsSelect = document.getElementById('physicsSelect');
+
+    const floorY = 350;
+    const restitution = 0.5; // mantul setting deful 5
+    let isTouchingFloor = false; // Flag log sentuhan
+    let hasStopped = false;
+
+    let box = {
+      x: canvas.width / 2 - 20,
+      y: 50,
+      width: 40,
+      height: 40,
+      velocityX: 1,
+      velocityY: 0.1,
+      gravity: 0.6,
+      gravityModifier: 1,
+      angle: 0,
+      rotateSpeed: 0.05
+    };
+
+    function setPhysics(mode) {
+      switch (mode) {
+        case "realistic":
+          box.gravity = 0.5;
+          box.gravityModifier = 1;
+          break;
+        case "arcade":
+          box.gravity = 0.5;
+          box.gravityModifier = 1;
+          break;
+        case "cartoon":
+          box.gravity = 0.4;
+          box.gravityModifier = 0.7;
+          break;
+        case "slowmo":
+          box.gravity = 0.3;
+          box.gravityModifier = 0.3;
+          break;
+        case "chaos":
+          box.gravity = 0.8;
+          box.gravityModifier = 1.3;
+          box.velocityX = Math.random() * 4 - 2;
+          box.rotateSpeed = Math.random() * 0.4 - 0.2;
+          break;
+      }
+    }
+
+    physicsSelect.addEventListener('change', () => {
+      resetBox();
+      setPhysics(physicsSelect.value);
+    });
+
+    function resetBox() {
+      box.x = canvas.width / 2 - 20;
+      box.y = 40;
+      box.velocityY = 0;
+      box.angle = 0;
+      box.rotateSpeed = 0.05;
+      box.velocityX = 1;
+      isTouchingFloor = false;
+      hasStopped = false;
+    }
+
+    function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw floor line
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, floorY);
+      ctx.lineTo(canvas.width, floorY);
+      ctx.stroke();
+
+      // Physics update
+      box.velocityY += box.gravity * box.gravityModifier;
+      box.y += box.velocityY;
+      box.x += box.velocityX;
+      box.angle += box.rotateSpeed;
+
+      box.velocityX *= 0.98;
+      box.rotateSpeed *= 0.98;
+
+      const boxMidY = box.y + box.height / 2;
+
+      // Collision with floor
+      if (boxMidY >= floorY) {
+        const correction = boxMidY - floorY;
+        box.y -= correction;
+
+        box.velocityY *= -restitution;
+
+        if (Math.abs(box.velocityY) < 0.5) {
+          if (!hasStopped) {
+            console.log('velocityY 0');
+            hasStopped = true;
+          }
+          box.velocityY = 0;
+        } else {
+          hasStopped = false;
+        }
+
+        box.rotateSpeed *= 0.9;
+      }
+
+      // Log when box middle exceeds floorY (once per contact)
+      if (boxMidY > floorY) {
+        if (!isTouchingFloor) {
+          console.log(box.velocityY);
+          isTouchingFloor = true;
+        }
+      } else {
+        isTouchingFloor = false;
+      }
+
+      // Wall collision
+      if (box.x <= 0 || box.x + box.width >= canvas.width) {
+        box.velocityX *= -1;
+      }
+
+      // Draw rotating box
+      ctx.save();
+      ctx.translate(box.x + box.width / 2, box.y + box.height / 20);
+      ctx.rotate(box.angle);
+      ctx.fillStyle = "yellow";
+      ctx.fillRect(-box.width / 2, -box.height / 2, box.width, box.height);
+      ctx.restore();
+
+      requestAnimationFrame(update);
+    }
+
+    setPhysics("realistic");
+    update();
+  </script>
+
+</body>
+
+</html>

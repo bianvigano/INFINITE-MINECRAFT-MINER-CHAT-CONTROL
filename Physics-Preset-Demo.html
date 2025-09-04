@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Physics Preset Demo</title>
+  <style>
+    canvas { border: 1px solid #000; background: #eef; }
+    select { margin-top: 10px; font-size: 16px; }
+  </style>
+</head>
+<body>
+
+<canvas id="canvas" width="300" height="400"></canvas>
+<br>
+<select id="physicsSelect">
+  <option value="realistic">Realistic</option>
+  <option value="arcade">Arcade</option>
+  <option value="cartoon">Cartoon</option>
+  <option value="slowmo">Slow Motion</option>
+  <option value="chaos">Chaos Mode</option>
+</select>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const physicsSelect = document.getElementById('physicsSelect');
+
+  let pickaxe = {
+    x: canvas.width / 2 - 20,
+    y: 50,
+    width: 40,
+    height: 40,
+    velocityX: 1,
+    velocityY: 0,
+    gravity: 0.5,
+    gravityModifier: 1,
+    rotateSpeed: 0.05,
+    angle: 0
+  };
+
+  function setPhysics(mode) {
+    switch (mode) {
+      case "realistic":
+        pickaxe.gravity = 0.6;
+        pickaxe.gravityModifier = 1;
+        break;
+      case "arcade":
+        pickaxe.gravity = 0.5;
+        pickaxe.gravityModifier = 1;
+        break;
+      case "cartoon":
+        pickaxe.gravity = 0.4;
+        pickaxe.gravityModifier = 0.7;
+        break;
+      case "slowmo":
+        pickaxe.gravity = 0.3;
+        pickaxe.gravityModifier = 0.2;
+        break;
+      case "chaos":
+        pickaxe.gravity = 0.7;
+        pickaxe.gravityModifier = 1.2;
+        pickaxe.velocityX = Math.random() * 4 - 2;
+        pickaxe.rotateSpeed = Math.random() * 0.4 - 0.2;
+        break;
+    }
+  }
+
+  physicsSelect.addEventListener('change', () => {
+    resetPickaxe();
+    setPhysics(physicsSelect.value);
+  });
+
+  function resetPickaxe() {
+    pickaxe.x = canvas.width / 2 - 20;
+    pickaxe.y = 50;
+    pickaxe.velocityY = 0;
+    pickaxe.angle = 0;
+    pickaxe.rotateSpeed = 0.05;
+    pickaxe.velocityX = 1;
+  }
+
+  function update() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    pickaxe.velocityY += pickaxe.gravity * pickaxe.gravityModifier;
+    pickaxe.y += pickaxe.velocityY;
+    pickaxe.x += pickaxe.velocityX;
+    pickaxe.velocityX *= 0.98;
+    pickaxe.angle += pickaxe.rotateSpeed;
+    pickaxe.rotateSpeed *= 0.98;
+
+    if (pickaxe.y + pickaxe.height > canvas.height) {
+      pickaxe.y = canvas.height - pickaxe.height;
+      pickaxe.velocityY *= -0.6;
+    }
+
+    if (pickaxe.x < 0 || pickaxe.x + pickaxe.width > canvas.width) {
+      pickaxe.velocityX *= -1;
+    }
+
+    ctx.save();
+    ctx.translate(pickaxe.x + pickaxe.width / 2, pickaxe.y + pickaxe.height / 2);
+    ctx.rotate(pickaxe.angle);
+    ctx.fillStyle = "gold";
+    ctx.fillRect(-pickaxe.width / 2, -pickaxe.height / 2, pickaxe.width, pickaxe.height);
+    ctx.restore();
+
+    requestAnimationFrame(update);
+  }
+
+  setPhysics("realistic");
+  update();
+</script>
+
+</body>
+</html>

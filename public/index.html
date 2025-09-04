@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Infinite Minecraft Miner - Canvas</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #1e1e1e;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+    canvas {
+      border: 2px solid #444;
+      background-color: #000;
+      margin-bottom: 20px;
+    }
+    #progress-bar {
+      width: 100%;
+      height: 20px;
+      background: #555;
+      margin: 10px 0;
+      border-radius: 10px;
+    }
+    #progress-fill {
+      height: 100%;
+      background: limegreen;
+      border-radius: 10px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .inventory {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 10px 0;
+    }
+    .inventory div {
+      background: #333;
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+    .commands button {
+      margin: 4px;
+      padding: 8px 16px;
+      font-size: 14px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>INFINITE MINECRAFT MINER</h1>
+
+  <canvas id="mineCanvas" width="320" height="320"></canvas>
+
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+
+  <div class="inventory" id="inventory"></div>
+
+  <div class="commands">
+    <button onclick="sendCommand('GOLDEN')">GOLDEN</button>
+    <button onclick="sendCommand('TNT')">TNT</button>
+    <button onclick="sendCommand('FAST')">FAST</button>
+    <button onclick="sendCommand('SLOW')">SLOW</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const progressFill = document.getElementById('progress-fill');
+    const inventoryDiv = document.getElementById('inventory');
+    const canvas = document.getElementById('mineCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const rows = 10, cols = 10, blockSize = 32;
+    let blocks = generateBlocks();
+    let currentDigIndex = 0;
+
+    const colors = {
+      stone: '#888',
+      dirt: '#7f5a36',
+      grass: '#4caf50',
+      iron: '#a19d94',
+      gold: '#ffd700',
+      redstone: '#c11b17',
+      diamond: '#4dd0e1',
+      emerald: '#2ecc71',
+      empty: '#111'
+    };
+
+    function generateBlocks() {
+      const types = ['stone', 'dirt', 'grass', 'iron', 'gold', 'redstone', 'diamond', 'emerald'];
+      return Array.from({ length: rows * cols }, () => ({
+        type: types[Math.floor(Math.random() * types.length)],
+        dug: false
+      }));
+    }
+
+    function drawBlock(type, x, y, dug) {
+      ctx.fillStyle = dug ? colors.empty : colors[type] || '#fff';
+      ctx.fillRect(x, y, blockSize, blockSize);
+    }
+
+    function renderCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      blocks.forEach((block, i) => {
+        const x = (i % cols) * blockSize;
+        const y = Math.floor(i / cols) * blockSize;
+        drawBlock(block.type, x, y, block.dug);
+      });
+    }
+
+    socket.on('gameUpdate', (data) => {
+      const percent = Math.min(100, data.progress % 100);
+      progressFill.style.width = percent + '%';
+
+      inventoryDiv.innerHTML = Object.entries(data.inventory)
+        .map(([k, v]) => `<div>${k}: ${v}</div>`)
+        .join('');
+
+      if (currentDigIndex < blocks.length) {
+        blocks[currentDigIndex].dug = true;
+        currentDigIndex++;
+      } else {
+        blocks = generateBlocks();
+        currentDigIndex = 0;
+      }
+      renderCanvas();
+    });
+
+    function sendCommand(cmd) {
+      socket.emit('command', cmd);
+    }
+
+    renderCanvas();
+  </script>
+</body>
+</html>

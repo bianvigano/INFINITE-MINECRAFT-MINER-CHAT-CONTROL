@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Infinite Minecraft Miner</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #222;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #444;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background: limegreen;
+            border-radius: 8px;
+            transition: width 0.3s;
+        }
+
+        .inventory {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 10px 0;
+        }
+
+        .inventory div {
+            background: #333;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .commands button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, 32px);
+            gap: 2px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .tile {
+            width: 32px;
+            height: 32px;
+            background-color: #555;
+            border-radius: 4px;
+        }
+
+        .tile.iron {
+            background-color: #a19d94;
+        }
+
+        .tile.gold {
+            background-color: #ffd700;
+        }
+
+        .tile.redstone {
+            background-color: #c11b17;
+        }
+
+        .tile.diamond {
+            background-color: #4dd0e1;
+        }
+
+        .tile.emerald {
+            background-color: #2ecc71;
+        }
+
+        .tile.dirt {
+            background-color: #7f5a36;
+        }
+
+        .tile.grass {
+            background-color: #4caf50;
+        }
+
+        .tile.stone {
+            background-color: #999;
+        }
+
+        .tile.empty {
+            background-color: #111;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>INFINITE MINECRAFT MINER</h1>
+    <div id="progress-bar">
+        <div id="progress-fill"></div>
+    </div>
+
+    <div class="inventory" id="inventory"></div>
+    <h2>Mine View</h2>
+    <div id="mine-grid" class="grid"></div>
+
+    <div class="commands">
+        <button onclick="sendCommand('GOLDEN')">GOLDEN</button>
+        <button onclick="sendCommand('TNT')">TNT</button>
+        <button onclick="sendCommand('FAST')">FAST</button>
+        <button onclick="sendCommand('SLOW')">SLOW</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const progressFill = document.getElementById('progress-fill');
+        const inventoryDiv = document.getElementById('inventory');
+
+        // socket.on('gameUpdate', (data) => {
+        //     const percent = Math.min(100, data.progress % 100);
+        //     progressFill.style.width = percent + '%';
+
+        //     inventoryDiv.innerHTML = Object.entries(data.inventory)
+        //         .map(([item, amount]) => `<div>${item}: ${amount}</div>`)
+        //         .join('');
+        // });
+        let currentDigIndex = 0;
+        socket.on('gameUpdate', (data) => {
+            const percent = Math.min(100, data.progress % 100);
+            progressFill.style.width = percent + '%';
+
+            // Inventory update
+            inventoryDiv.innerHTML = Object.entries(data.inventory)
+                .map(([item, amount]) => `<div>${item}: ${amount}</div>`)
+                .join('');
+
+            // Gali 1 blok setiap update
+            if (currentDigIndex < blocks.length) {
+                blocks[currentDigIndex] = 'empty';
+                currentDigIndex++;
+                renderGrid();
+            }
+        });
+
+        function sendCommand(cmd) {
+            socket.emit('command', cmd);
+        }
+
+        const mineGrid = document.getElementById('mine-grid');
+
+        // Generate dummy block data (10x10 grid)
+        let blocks = Array.from({ length: 100 }, () => randomBlock());
+
+        function randomBlock() {
+            const types = ['stone', 'dirt', 'grass', 'iron', 'gold', 'redstone', 'diamond', 'emerald'];
+            return types[Math.floor(Math.random() * types.length)];
+        }
+
+        function renderGrid() {
+            mineGrid.innerHTML = blocks
+                .map(type => `<div class="tile ${type}"></div>`)
+                .join('');
+        }
+
+        renderGrid();
+    </script>
+</body>
+
+</html>

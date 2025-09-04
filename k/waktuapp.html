@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Zona Waktu Lengkap</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            min-height: 100vh;
+            background-color: #f4f4f4;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .sidebar {
+            width: 250px;
+            background-color: #222;
+            color: white;
+            padding: 20px;
+            flex-shrink: 0;
+        }
+
+        .sidebar h2 {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .sidebar button {
+            display: block;
+            width: 100%;
+            margin: 8px 0;
+            padding: 10px;
+            border: none;
+            background: #444;
+            color: white;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .sidebar button:hover {
+            background: #666;
+        }
+
+        .content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .dark-mode {
+            background-color: #1a1a1a;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                display: flex;
+                overflow-x: auto;
+            }
+
+            .sidebar button {
+                flex: 1;
+                white-space: nowrap;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sidebar">
+        <h2>Menu</h2>
+        <button onclick="showSection('waktu')">Waktu Sekarang</button>
+        <button onclick="showSection('selisih')">Selisih Waktu</button>
+        <button onclick="showSection('alarm')">Alarm/Reminder</button>
+        <button onclick="showSection('konversi')">Konversi Zona</button>
+        <!-- <button onclick="showSection('lokasi')">Lokasi Otomatis</button> -->
+        <button onclick="showSection('riwayat')">Riwayat Ekspor</button>
+        <button onclick="toggleDarkMode()">Dark Mode</button>
+    </div>
+
+    <div class="content">
+        <div id="waktu" class="section active">
+            <h3>Waktu Sekarang</h3>
+            <p id="localTime"></p>
+            <p id="localTimeTxt"></p>
+            <p id="biosTime"></p>
+            <p id="biosTimeTxt"></p>
+
+            <label for="timezone">Pilih Zona Waktu Dunia:</label>
+            <select id="timezone">
+                <option value="UTC">UTC</option>
+                <option value="Europe/London">Inggris (London)</option>
+                <option value="Europe/Paris">Eropa (Paris)</option>
+                <option value="Asia/Kolkata">India (Kolkata)</option>
+                <option value="Asia/Jakarta" selected>Indonesia (Jakarta)</option>
+                <option value="America/New_York">Amerika (New York)</option>
+                <option value="Asia/Tokyo">Jepang (Tokyo)</option>
+            </select>
+
+            <p id="worldTime"></p>
+
+            <button onclick="exportToTxt()">Ekspor ke .txt</button>
+        </div>
+
+        <div id="selisih" class="section">
+            <h3>Selisih Waktu Antar Zona</h3>
+            <!-- Konten Selisih Waktu -->
+            <label for="zona1">Zona Waktu 1:</label>
+            <select id="zona1">
+                <option value="UTC">UTC</option>
+                <option value="Europe/London">Inggris (London)</option>
+                <option value="Europe/Paris">Eropa (Paris)</option>
+                <option value="Asia/Kolkata">India (Kolkata)</option>
+                <option value="Asia/Jakarta" selected>Indonesia (Jakarta)</option>
+                <option value="Asia/Makassar">Indonesia (Makassar)</option>
+                <option value="Asia/Jayapura">Indonesia (Jayapura)</option>
+                <option value="America/New_York">Amerika (New York)</option>
+                <option value="Asia/Tokyo">Jepang (Tokyo)</option>
+            </select>
+
+            <br><br>
+
+            <label for="zona2">Zona Waktu 2:</label>
+            <select id="zona2">
+                <option value="UTC">UTC</option>
+                <option value="Europe/London">Inggris (London)</option>
+                <option value="Europe/Paris">Eropa (Paris)</option>
+                <option value="Asia/Kolkata">India (Kolkata)</option>
+                <option value="Asia/Jakarta">Indonesia (Jakarta)</option>
+                <option value="Asia/Makassar" selected>Indonesia (Makassar)</option>
+                <option value="Asia/Jayapura">Indonesia (Jayapura)</option>
+                <option value="America/New_York">Amerika (New York)</option>
+                <option value="Asia/Tokyo">Jepang (Tokyo)</option>
+            </select>
+
+            <p id="selisihHasil" style="margin-top:10px;"></p>
+        </div>
+        <div id="alarm" class="section">
+            <h3>Alarm/Reminder</h3>
+            <!-- Konten Alarm -->
+            <label for="alarmTime">Pilih Waktu Alarm:</label>
+            <input type="time" id="alarmTime">
+
+            <br><br>
+
+            <label for="alarmZone">Pilih Zona Waktu Alarm:</label>
+            <select id="alarmZone">
+                <option value="Asia/Jakarta" selected>Indonesia (Jakarta)</option>
+                <option value="Asia/Makassar">Indonesia (Makassar)</option>
+                <option value="Asia/Jayapura">Indonesia (Jayapura)</option>
+                <option value="Asia/Kolkata">India (Kolkata)</option>
+                <option value="Europe/London">Inggris (London)</option>
+                <option value="Europe/Paris">Eropa (Paris)</option>
+                <option value="Asia/Tokyo">Jepang (Tokyo)</option>
+                <option value="America/New_York">Amerika (New York)</option>
+            </select>
+
+            <br><br>
+
+            <button onclick="setAlarm()">Set Alarm</button>
+            <p id="alarmStatus" style="margin-top:10px;"></p>
+            <audio id="alarmSound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"
+                preload="auto"></audio>
+        </div>
+        <div id="konversi" class="section">
+            <h3>Konversi Zona Waktu</h3>
+            <!-- Konten Konversi -->
+            <label for="inputDate">Tanggal & Waktu:</label>
+            <input type="datetime-local" id="inputDate">
+
+            <br><br>
+
+            <label for="fromZone">Dari Zona Waktu:</label>
+            <select id="fromZone">
+                <option value="Asia/Jakarta" selected>Indonesia (Jakarta)</option>
+                <option value="Asia/Makassar">Indonesia (Makassar)</option>
+                <option value="Asia/Jayapura">Indonesia (Jayapura)</option>
+                <option value="Europe/London">Inggris (London)</option>
+                <option value="Europe/Paris">Eropa (Paris)</option>
+                <option value="Asia/Kolkata">India (Kolkata)</option>
+                <option value="America/New_York">Amerika (New York)</option>
+                <option value="Asia/Tokyo">Jepang (Tokyo)</option>
+            </select>
+
+            <br><br>
+
+            <label for="toZone">Ke Zona Waktu:</label>
+            <select id="toZone">
+                <option value="Asia/Jakarta">Indonesia (Jakarta)</option>
+                <option value="Asia/Makassar">Indonesia (Makassar)</option>
+                <option value="Asia/Jayapura">Indonesia (Jayapura)</option>
+                <option value="Europe/London">Inggris (London)</option>
+                <option value="Europe/Paris">Eropa (Paris)</option>
+                <option value="Asia/Kolkata">India (Kolkata)</option>
+                <option value="America/New_York">Amerika (New York)</option>
+                <option value="Asia/Tokyo" selected>Jepang (Tokyo)</option>
+            </select>
+
+            <p id="convertedTime" style="margin-top:10px;"></p>
+
+        </div>
+        <div id="lokasi" class="section">
+            <h3>Lokasi Otomatis</h3>
+            <!-- Konten Lokasi Otomatis -->
+            <p><strong>Zona Waktu Browser Saat Ini:</strong> <span id="browserZone"></span></p>
+            <p><strong>Offset UTC:</strong> <span id="utcOffset"></span></p>
+            <p><strong>Lokasi Perkiraan:</strong> <span id="geoLocation">Memuat lokasi...</span></p>
+
+        </div>
+        <div id="riwayat" class="section">
+            <h3>Riwayat Ekspor</h3>
+            <!-- Konten Riwayat -->
+            <ul id="riwayatList"></ul>
+            <button onclick="hapusRiwayat()">Hapus Semua Riwayat</button>
+
+        </div>
+    </div>
+
+    <script>
+        function showSection(id) {
+            document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+        }
+
+        function updateTimes() {
+            const now = new Date();
+            const localTime = now.toLocaleString('en-US');
+const localTxt = now.toLocaleString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+});
+
+            // === WAKTU LOKAL (Browser) ===
+            document.getElementById("localTime").textContent =
+                `Waktu Lokal (Browser): ${localTime}`;
+
+            // === WAKTU LOKAL TXT (Browser) === - FORMAT DISESUAIKAN
+
+
+
+
+            document.getElementById("localTimeTxt").textContent =
+                `Waktu Lokal TXT (Browser): ${localTxt}`;
+
+            // === BIOS TIME (Simulasi, UTC) ===
+
+            document.getElementById("biosTime").textContent =
+                `Waktu BIOS (Simulasi): ${biosFormatted}`;
+
+            const utcDayName = dayNames[now.getUTCDay()];
+            const utcMonthName = monthNames[now.getUTCMonth()];
+            const biosTxt = `${utcDayName}, ${utcDay.toString().padStart(2, '0')} ${utcMonthName} ${utcYear} ${utcHours}:${utcMinutes}:${utcSeconds} GMT`;
+
+            document.getElementById("biosTimeTxt").textContent =
+                `Waktu BIOS TXT (Simulasi): ${biosTxt}`;
+            const tz = document.getElementById("timezone").value;
+            try {
+                const intlTime = new Intl.DateTimeFormat('id-ID', { timeZone: tz, dateStyle: 'full', timeStyle: 'long' }).format(now);
+                document.getElementById("worldTime").textContent = `Waktu di ${tz}: ${intlTime}`;
+            } catch (e) {
+                document.getElementById("worldTime").textContent = `Zona waktu tidak dikenali.`;
+            }
+        }
+
+        function exportToTxt() {
+            const text = [
+                document.getElementById("localTime").textContent,
+                document.getElementById("biosTime").textContent,
+                document.getElementById("worldTime").textContent
+            ].join("\n");
+            const blob = new Blob([text], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "waktu-sekarang.txt";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        document.getElementById("timezone").addEventListener("change", updateTimes);
+        setInterval(updateTimes, 1000);
+        updateTimes();
+
+        function hitungSelisihZona() {
+            const now = new Date();
+            const zona1 = document.getElementById("zona1").value;
+            const zona2 = document.getElementById("zona2").value;
+
+            const t1 = new Intl.DateTimeFormat('en-US', { timeZone: zona1, hour12: false, hour: 'numeric', minute: 'numeric' }).formatToParts(now);
+            const t2 = new Intl.DateTimeFormat('en-US', { timeZone: zona2, hour12: false, hour: 'numeric', minute: 'numeric' }).formatToParts(now);
+
+            const jam1 = parseInt(t1.find(p => p.type === 'hour').value);
+            const menit1 = parseInt(t1.find(p => p.type === 'minute').value);
+            const jam2 = parseInt(t2.find(p => p.type === 'hour').value);
+            const menit2 = parseInt(t2.find(p => p.type === 'minute').value);
+
+            const totalMenit1 = jam1 * 60 + menit1;
+            const totalMenit2 = jam2 * 60 + menit2;
+            const selisih = totalMenit2 - totalMenit1;
+
+            const jam = Math.floor(Math.abs(selisih) / 60);
+            const menit = Math.abs(selisih) % 60;
+            const arah = selisih > 0 ? 'lebih cepat' : 'lebih lambat';
+
+            document.getElementById("selisihHasil").textContent =
+                `Zona waktu ${zona2} ${arah} ${jam} jam ${menit} menit dibanding ${zona1}`;
+        }
+
+        document.getElementById("zona1").addEventListener("change", hitungSelisihZona);
+        document.getElementById("zona2").addEventListener("change", hitungSelisihZona);
+        setInterval(hitungSelisihZona, 1000);
+
+        let alarmTimeSet = null;
+        let alarmZone = null;
+        let alarmTriggered = false;
+
+        function setAlarm() {
+            const time = document.getElementById("alarmTime").value;
+            alarmZone = document.getElementById("alarmZone").value;
+            if (!time) {
+                document.getElementById("alarmStatus").textContent = "Silakan pilih waktu alarm.";
+                return;
+            }
+            alarmTimeSet = time;
+            alarmTriggered = false;
+            document.getElementById("alarmStatus").textContent = `Alarm disetel pada ${time} (${alarmZone})`;
+        }
+
+        function cekAlarm() {
+            if (!alarmTimeSet || alarmTriggered) return;
+
+            const now = new Date();
+            const alarmNow = new Intl.DateTimeFormat('en-US', {
+                timeZone: alarmZone,
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(now);
+
+            if (alarmNow === alarmTimeSet) {
+                document.getElementById("alarmStatus").textContent = `⏰ Waktunya sekarang (${alarmNow}) di zona ${alarmZone}!`;
+                document.getElementById("alarmSound").play();
+                alarmTriggered = true;
+            }
+        }
+
+        setInterval(cekAlarm, 1000);
+
+
+        function konversiZona() {
+            const inputDateTime = document.getElementById("inputDate").value;
+            const fromZone = document.getElementById("fromZone").value;
+            const toZone = document.getElementById("toZone").value;
+
+            if (!inputDateTime) {
+                document.getElementById("convertedTime").textContent = "Silakan pilih tanggal & waktu.";
+                return;
+            }
+
+            const [datePart, timePart] = inputDateTime.split("T");
+            const [year, month, day] = datePart.split("-");
+            const [hour, minute] = timePart.split(":");
+
+            // Buat objek tanggal di zona asal
+            const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+
+            const formatted = new Intl.DateTimeFormat("id-ID", {
+                timeZone: toZone,
+                dateStyle: "full",
+                timeStyle: "long"
+            }).format(utcDate);
+
+            document.getElementById("convertedTime").textContent =
+                `Waktu di ${toZone}: ${formatted}`;
+        }
+
+        document.getElementById("inputDate").addEventListener("change", konversiZona);
+        document.getElementById("fromZone").addEventListener("change", konversiZona);
+        document.getElementById("toZone").addEventListener("change", konversiZona);
+
+
+        function tampilkanZonaBrowser() {
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const offsetMenit = new Date().getTimezoneOffset();
+            const offsetJam = -offsetMenit / 60;
+
+            document.getElementById("browserZone").textContent = timezone;
+            document.getElementById("utcOffset").textContent = `UTC${offsetJam >= 0 ? "+" : ""}${offsetJam}`;
+        }
+
+        function tampilkanLokasiGeografis() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    const lat = pos.coords.latitude.toFixed(4);
+                    const lon = pos.coords.longitude.toFixed(4);
+                    document.getElementById("geoLocation").textContent = `Lat: ${lat}, Lon: ${lon}`;
+                }, err => {
+                    document.getElementById("geoLocation").textContent = "Gagal mengambil lokasi.";
+                });
+            } else {
+                document.getElementById("geoLocation").textContent = "Geolocation tidak didukung.";
+            }
+        }
+
+        tampilkanZonaBrowser();
+        // tampilkanLokasiGeografis();
+
+        function exportToTxt() {
+            const local = document.getElementById("localTime").textContent;
+            const bios = document.getElementById("biosTime").textContent;
+            const world = document.getElementById("worldTime").textContent;
+
+            const text = [local, bios, world].join("\n");
+            const blob = new Blob([text], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "waktu-sekarang.txt";
+            a.click();
+            URL.revokeObjectURL(url);
+
+            const timestamp = new Date().toLocaleString();
+            const riwayat = JSON.parse(localStorage.getItem("riwayatWaktu") || "[]");
+            riwayat.push(`[${timestamp}] - ${world}`);
+            localStorage.setItem("riwayatWaktu", JSON.stringify(riwayat));
+            tampilkanRiwayat();
+        }
+
+    </script>
+</body>
+
+</html>
